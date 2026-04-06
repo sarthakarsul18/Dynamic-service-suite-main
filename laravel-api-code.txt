@@ -1,0 +1,572 @@
+Laravel API Code for Pincode Services Feature (Updated for Bulk Operations)
+==========================================================================
+
+1. Create Migration for pincode_services table:
+-----------------------------------------------
+
+php artisan make:migration create_pincode_services_table
+
+Migration file content:
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up()
+    {
+        Schema::create('pincode_services', function (Blueprint $table) {
+            $table->id();
+            $table->string('state');
+            $table->string('city');
+            $table->string('pincode');
+            $table->unsignedBigInteger('service_id');
+            $table->decimal('price', 10, 2);
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+            
+            // Add foreign key constraint if you have a services table
+            // $table->foreign('service_id')->references('id')->on('services');
+            
+            // Add unique constraint to prevent duplicates
+            $table->unique(['state', 'city', 'pincode', 'service_id'], 'unique_pincode_service');
+            
+            // Add index for better performance
+            $table->index(['state', 'city', 'pincode']);
+            $table->index('service_id');
+        });
+    }
+
+    public function down()
+    {
+        Schema::dropIfExists('pincode_services');
+    }
+};
+
+2. Create Model:
+---------------
+
+php artisan make:model PincodeService
+
+Model file content (app/Models/PincodeService.php):
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class PincodeService extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'state',
+        'city',
+        'pincode',
+        'service_id',
+        'price',
+        'is_active'
+    ];
+
+    protected $casts = [
+        'price' => 'decimal:2',
+        'is_active' => 'boolean'
+    ];
+
+    // Relationship with service_prices table
+    public function service()
+    {
+        return $this->belongsTo(ServicePrice::class, 'service_id', 'id');
+    }
+}
+
+Create ServicePrice Model for service_prices table:
+php artisan make:model ServicePrice
+
+ServicePrice Model (app/Models/ServicePrice.php):
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class ServicePrice extends Model
+{
+    use HasFactory;
+
+    protected $table = 'service_prices'; // Specify the table name
+
+    protected $fillable = [
+        'category',
+        'name',
+        'description',
+        'price',
+        'discount',
+        'image',
+        'city',
+        'state',
+        'subcategory',
+        'pincode',
+        'package_percentage'
+    ];
+
+    // Reverse relationship
+    public function pincodeServices()
+    {
+        return $this->hasMany(PincodeService::class, 'service_id', 'id');
+    }
+}
+
+3. Create Controller with Bulk Operations:
+-----------------------------------------
+
+php artisan make:controller PincodeServiceController
+
+Controller file content (app/Http/Controllers/PincodeServiceController.php):
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\PincodeService;
+use App\Models\ServicePrice;
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
+
+class PincodeServiceController extends Controller
+{
+    /**
+     * Add a new pincode service (single entry)
+     */
+    public function addPincodeService(Request $request): JsonResponse
+    {
+        try {
+            // Validate the request
+            $validator = Validator::make($request->all(), [
+                'state' => 'required|string|max:255',
+                'city' => 'required|string|max:255',
+                'pincode' => 'required|string|max:10',
+                'service_id' => 'required|integer|exists:service_prices,id', // Updated to service_prices table
+                'price' => 'required|numeric|min:0'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 400);
+            }
+
+            // Use updateOrCreate to handle duplicates
+            $pincodeService = PincodeService::updateOrCreate(
+                [
+                    'state' => $request->state,
+                    'city' => $request->city,
+                    'pincode' => $request->pincode,
+                    'service_id' => $request->service_id
+                ],
+                [
+                    'price' => $request->price,
+                    'is_active' => true
+                ]
+            );
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Pincode service added successfully',
+                'data' => $pincodeService
+            ], 201);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to add pincode service',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Add multiple pincode services (bulk operation)
+     */
+    public function addBulkPincodeServices(Request $request): JsonResponse
+    {
+        try {
+            // Validate the request
+            $validator = Validator::make($request->all(), [
+                'services' => 'required|array|min:1',
+                'services.*.state' => 'required|string|max:255',
+                'services.*.city' => 'required|string|max:255',
+                'services.*.pincode' => 'required|string|max:10',
+                'services.*.service_id' => 'required|integer|exists:service_prices,id',
+                'services.*.price' => 'required|numeric|min:0'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 400);
+            }
+
+            $services = $request->services;
+            $created = 0;
+            $updated = 0;
+            $errors = [];
+
+            DB::beginTransaction();
+
+            try {
+                foreach ($services as $index => $serviceData) {
+                    $pincodeService = PincodeService::updateOrCreate(
+                        [
+                            'state' => $serviceData['state'],
+                            'city' => $serviceData['city'],
+                            'pincode' => $serviceData['pincode'],
+                            'service_id' => $serviceData['service_id']
+                        ],
+                        [
+                            'price' => $serviceData['price'],
+                            'is_active' => true
+                        ]
+                    );
+
+                    if ($pincodeService->wasRecentlyCreated) {
+                        $created++;
+                    } else {
+                        $updated++;
+                    }
+                }
+
+                DB::commit();
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Bulk operation completed successfully',
+                    'summary' => [
+                        'total_processed' => count($services),
+                        'created' => $created,
+                        'updated' => $updated,
+                        'errors' => count($errors)
+                    ]
+                ], 201);
+
+            } catch (\Exception $e) {
+                DB::rollback();
+                throw $e;
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to process bulk pincode services',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all pincode services with optional filters (Updated with service join)
+     */
+    public function getPincodeServices(Request $request): JsonResponse
+    {
+        try {
+            $query = PincodeService::with(['service' => function($query) {
+                $query->select('id', 'category', 'name', 'description');
+            }]);
+
+            // Apply filters if provided
+            if ($request->has('state') && $request->state) {
+                $query->where('state', 'like', '%' . $request->state . '%');
+            }
+
+            if ($request->has('city') && $request->city) {
+                $query->where('city', 'like', '%' . $request->city . '%');
+            }
+
+            if ($request->has('pincode') && $request->pincode) {
+                $query->where('pincode', 'like', '%' . $request->pincode . '%');
+            }
+
+            if ($request->has('service_id') && $request->service_id) {
+                $query->where('service_id', $request->service_id);
+            }
+
+            if ($request->has('category') && $request->category) {
+                $query->whereHas('service', function($q) use ($request) {
+                    $q->where('category', 'like', '%' . $request->category . '%');
+                });
+            }
+
+            // Only active services by default
+            if (!$request->has('include_inactive')) {
+                $query->where('is_active', true);
+            }
+
+            // Order by latest first
+            $query->orderBy('created_at', 'desc');
+
+            // Pagination
+            $perPage = $request->get('per_page', 15);
+            $pincodeServices = $query->paginate($perPage);
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $pincodeServices
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch pincode services',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update pincode service
+     */
+    public function updatePincodeService(Request $request, $id): JsonResponse
+    {
+        try {
+            $pincodeService = PincodeService::findOrFail($id);
+
+            $validator = Validator::make($request->all(), [
+                'state' => 'sometimes|string|max:255',
+                'city' => 'sometimes|string|max:255',
+                'pincode' => 'sometimes|string|max:10',
+                'service_id' => 'sometimes|integer|exists:services,id',
+                'price' => 'sometimes|numeric|min:0',
+                'is_active' => 'sometimes|boolean'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 400);
+            }
+
+            $pincodeService->update($request->only([
+                'state', 'city', 'pincode', 'service_id', 'price', 'is_active'
+            ]));
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Pincode service updated successfully',
+                'data' => $pincodeService
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to update pincode service',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get pincode services with detailed service information
+     */
+    public function getPincodeServicesWithDetails(Request $request): JsonResponse
+    {
+        try {
+            $query = DB::table('pincode_services as ps')
+                ->join('service_prices as sp', 'ps.service_id', '=', 'sp.id')
+                ->select(
+                    'ps.id',
+                    'ps.state',
+                    'ps.city', 
+                    'ps.pincode',
+                    'ps.service_id',
+                    'ps.price',
+                    'ps.is_active',
+                    'ps.created_at',
+                    'ps.updated_at',
+                    'sp.id as service_id',
+                    'sp.category',
+                    'sp.name as service_name',
+                    'sp.description'
+                );
+
+            // Apply filters if provided
+            if ($request->has('state') && $request->state) {
+                $query->where('ps.state', 'like', '%' . $request->state . '%');
+            }
+
+            if ($request->has('city') && $request->city) {
+                $query->where('ps.city', 'like', '%' . $request->city . '%');
+            }
+
+            if ($request->has('pincode') && $request->pincode) {
+                $query->where('ps.pincode', 'like', '%' . $request->pincode . '%');
+            }
+
+            if ($request->has('category') && $request->category) {
+                $query->where('sp.category', 'like', '%' . $request->category . '%');
+            }
+
+            if ($request->has('service_name') && $request->service_name) {
+                $query->where('sp.name', 'like', '%' . $request->service_name . '%');
+            }
+
+            // Only active services by default
+            if (!$request->has('include_inactive')) {
+                $query->where('ps.is_active', true);
+            }
+
+            // Order by latest first
+            $query->orderBy('ps.created_at', 'desc');
+
+            // Get results
+            $results = $query->get();
+
+            // Transform results to match expected format
+            $transformedResults = $results->map(function($item) {
+                return [
+                    'id' => $item->id,
+                    'state' => $item->state,
+                    'city' => $item->city,
+                    'pincode' => $item->pincode,
+                    'service_id' => $item->service_id,
+                    'price' => $item->price,
+                    'is_active' => (bool) $item->is_active,
+                    'created_at' => $item->created_at,
+                    'updated_at' => $item->updated_at,
+                    'service' => [
+                        'id' => $item->service_id,
+                        'category' => $item->category,
+                        'name' => $item->service_name,
+                        'description' => $item->description
+                    ]
+                ];
+            });
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'data' => $transformedResults,
+                    'total' => $transformedResults->count()
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch pincode services with details',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    public function deletePincodeService($id): JsonResponse
+    {
+        try {
+            $pincodeService = PincodeService::findOrFail($id);
+            $pincodeService->delete();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Pincode service deleted successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to delete pincode service',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+}
+
+4. Add Routes:
+-------------
+
+Add these routes to your routes/api.php file:
+
+use App\Http\Controllers\PincodeServiceController;
+
+// Pincode Services Routes
+Route::post('/add-pincode-service', [PincodeServiceController::class, 'addPincodeService']);
+Route::post('/add-bulk-pincode-services', [PincodeServiceController::class, 'addBulkPincodeServices']);
+Route::get('/pincode-services', [PincodeServiceController::class, 'getPincodeServices']);
+Route::get('/pincode-services-details', [PincodeServiceController::class, 'getPincodeServicesWithDetails']);
+Route::put('/pincode-services/{id}', [PincodeServiceController::class, 'updatePincodeService']);
+Route::delete('/pincode-services/{id}', [PincodeServiceController::class, 'deletePincodeService']);
+
+5. Run Migration:
+----------------
+
+php artisan migrate
+
+6. API Endpoints Summary:
+------------------------
+
+POST /api/add-pincode-service
+- Add single pincode service
+- Required fields: state, city, pincode, service_id, price
+
+POST /api/add-bulk-pincode-services
+- Add multiple pincode services in one request
+- Required: services array with each item having state, city, pincode, service_id, price
+
+GET /api/pincode-services
+- Get all pincode services with optional filters
+- Optional query params: state, city, pincode, service_id, per_page
+
+PUT /api/pincode-services/{id}
+- Update existing pincode service
+- Optional fields: state, city, pincode, service_id, price, is_active
+
+DELETE /api/pincode-services/{id}
+- Delete pincode service
+
+7. Example API Requests:
+-----------------------
+
+Add Single Pincode Service:
+POST /api/add-pincode-service
+{
+    "state": "Maharashtra",
+    "city": "Mumbai",
+    "pincode": "400001",
+    "service_id": 1,
+    "price": 500.00
+}
+
+Add Bulk Pincode Services:
+POST /api/add-bulk-pincode-services
+{
+    "services": [
+        {
+            "state": "Maharashtra",
+            "city": "Mumbai",
+            "pincode": "400001",
+            "service_id": 1,
+            "price": 500.00
+        },
+        {
+            "state": "Maharashtra",
+            "city": "Mumbai",
+            "pincode": "400002",
+            "service_id": 1,
+            "price": 500.00
+        }
+    ]
+}
+
+Get Pincode Services with filters:
+GET /api/pincode-services?state=Maharashtra&city=Mumbai&per_page=10
+
+Note: The frontend will continue to use the single endpoint (/add-pincode-service) for each combination, 
+but you can also implement the bulk endpoint if you want to optimize by sending all data in one request.
