@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -25,8 +24,26 @@ jobs:
 
           script: |
             cd /var/www/Dynamic-service-suite-main
-            git pull origin main
+
+            echo "Fetching latest code..."
+            git fetch --all
+
+            echo "Resetting repo to latest commit..."
+            git reset --hard origin/master
+
+            echo "Installing dependencies..."
             npm install
+
+            echo "Cleaning old build..."
+            rm -rf dist
+
+            echo "Building project..."
             npm run build
+
+            echo "Deploying to Apache root..."
             sudo cp -r dist/* /var/www/html/
+
+            echo "Restarting Apache..."
             sudo systemctl restart httpd
+
+            echo "Deployment complete!"
