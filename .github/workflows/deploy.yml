@@ -23,27 +23,45 @@ jobs:
           port: ${{ secrets.EC2_PORT }}
 
           script: |
-            cd /var/www/Dynamic-service-suite-main
 
-            echo "Fetching latest code..."
-            git fetch --all
+              echo "Starting deployment..."
 
-            echo "Resetting repo to latest commit..."
-            git reset --hard origin/master
+              IST_TIME=$(TZ="Asia/Kolkata" date +"%Y-%m-%d_%I-%M-%S_%p")
 
-            echo "Installing dependencies..."
-            npm install
+              BACKUP_DIR="/var/www/html/backups/backup_${IST_TIME}_IST"
 
-            echo "Cleaning old build..."
-            rm -rf dist
+              echo "Creating backup..."
 
-            echo "Building project..."
-            npm run build
+              mkdir -p "$BACKUP_DIR"
 
-            echo "Deploying to Apache root..."
-            sudo cp -r dist/* /var/www/html/
+              rsync -av --exclude='backups' \
+              /var/www/html/ \
+              "$BACKUP_DIR/"
 
-            echo "Restarting Apache..."
-            sudo systemctl restart httpd
+              echo "Backup created at $BACKUP_DIR"
 
-            echo "Deployment complete!"
+              echo "Updating project repository..."
+
+              cd /var/www/Dynamic-service-suite-main
+
+              git fetch --all
+              git reset --hard origin/master
+
+              echo "Installing dependencies..."
+
+              npm install
+
+              echo "Building React app..."
+
+              rm -rf dist
+              npm run build
+
+              echo "Deploying build..."
+
+              sudo cp -r dist/* /var/www/html/
+
+              echo "Restarting Apache..."
+
+              sudo systemctl restart httpd
+
+              echo "Deployment completed successfully at $IST_TIME"
