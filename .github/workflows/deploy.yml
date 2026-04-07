@@ -1,4 +1,4 @@
-name: Deploy React App to EC2
+name: Deploy React App to EC2 (Backup + Rollback Ready)
 
 on:
   push:
@@ -30,15 +30,17 @@ jobs:
 
               BACKUP_DIR="/var/www/html/backups/backup_${IST_TIME}_IST"
 
-              echo "Creating backup..."
+              echo "Creating backup directory..."
 
-              mkdir -p "$BACKUP_DIR"
+              sudo mkdir -p "$BACKUP_DIR"
 
-              rsync -av --exclude='backups' \
+              echo "Creating backup of current live site..."
+
+              sudo rsync -av --exclude='backups' \
               /var/www/html/ \
               "$BACKUP_DIR/"
 
-              echo "Backup created at $BACKUP_DIR"
+              echo "Backup created successfully at $BACKUP_DIR"
 
               echo "Updating project repository..."
 
@@ -51,16 +53,19 @@ jobs:
 
               npm install
 
-              echo "Building React app..."
+              echo "Cleaning old build..."
 
               rm -rf dist
+
+              echo "Building React app..."
+
               npm run build
 
-              echo "Deploying build..."
+              echo "Deploying new build to Apache directory..."
 
               sudo cp -r dist/* /var/www/html/
 
-              echo "Restarting Apache..."
+              echo "Restarting Apache server..."
 
               sudo systemctl restart httpd
 
