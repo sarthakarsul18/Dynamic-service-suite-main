@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -28,7 +29,7 @@ jobs:
 
               IST_TIME=$(TZ="Asia/Kolkata" date +"%Y-%m-%d_%I-%M-%S_%p")
 
-              BACKUP_DIR="/var/www/html/backups/backup_${IST_TIME}_IST"
+              BACKUP_DIR="/var/backups/react-site/backup_${IST_TIME}_IST"
 
               echo "Creating backup directory..."
 
@@ -36,7 +37,7 @@ jobs:
 
               echo "Creating backup of current live site..."
 
-              sudo rsync -av --exclude='backups' \
+              sudo rsync -av \
               /var/www/html/ \
               "$BACKUP_DIR/"
 
