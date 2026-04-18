@@ -110,7 +110,7 @@ const Login = () => {
           </div>
           <div>
             <CardTitle className="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              Novacred Insurance
+              Tommyandfurry
             </CardTitle>
             {/* <CardDescription className="text-muted-foreground">
               Multi-tenant management platform
