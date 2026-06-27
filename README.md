@@ -79,31 +79,21 @@ No more `Ctrl+F`. No more skimming 40 pages for one paragraph.
 
 ## 🖼️ Preview <a name="preview"></a>
 
-> 💡 Replace this with a real screenshot or GIF, e.g. `docs/demo.gif`:
-> `![DocMind chat interface in dark mode, answering a question about an uploaded PDF with cited sources](docs/demo.gif)`
+**What the experience feels like:**
 
-```
-┌────────────────────────────────────────────────────────┐
-│                       🧠 DocMind                        │
-│         Ask anything. Get answers from your PDF.        │
-├────────────────────────────────────────────────────────┤
-│                                                          │
-│                                       🧑‍💻 You          │
-│                            ╭─────────────────────────╮  │
-│                            │  Summarize this document │ │
-│                            ╰─────────────────────────╯  │
-│                                                          │
-│  🤖 DocMind                                             │
-│  ╭────────────────────────────────────────────────╮     │
-│  │ The document outlines three key findings...    │     │
-│  ╰────────────────────────────────────────────────╯     │
-│  📄 View sources ▾   (page 4, page 7)                   │
-│                                                          │
-│  ┌────────────────────────────────────────────────┐    │
-│  │  Message DocMind…                          ➤   │    │
-│  └────────────────────────────────────────────────┘    │
-└────────────────────────────────────────────────────────┘
-```
+| | |
+|---|---|
+| 🎨 **Theme** | Dark, ChatGPT-inspired, green gradient accents |
+| 💬 **Chat bubbles** | Rounded, color-coded — green for you, charcoal for DocMind |
+| ⌨️ **Live typing** | Pulsing "thinking" dots, then the answer streams in word-by-word |
+| 📄 **Sources panel** | Collapsible, sits under every answer, shows the exact page used |
+| ✨ **Empty state** | Suggested example questions appear as one-click chips |
+
+> 📸 **Add a real screenshot or GIF** once you have one (e.g. save it as `docs/demo.gif`) and drop this line right here:
+>
+> ```markdown
+> ![DocMind chat interface answering a question with cited sources](docs/demo.gif)
+> ```
 
 ---
 
